@@ -12,18 +12,38 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type mockCryptoSetup struct {
+	data []byte
+}
+
+func (mockCryptoSetup) HandleCryptoStream() error { panic("not implemented") }
+func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	return m.data, nil
+}
+func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	panic("not implemented")
+}
+func (mockCryptoSetup) LastSealingEncryptionLevel() protocol.EncryptionLevel { panic("not implemented") }
+func (mockCryptoSetup) LastOpeningEncryptionLevel() protocol.EncryptionLevel {
+	return protocol.EncryptionUnencrypted
+}
+func (mockCryptoSetup) DiversificationNonce() []byte { panic("not implemented") }
+func (mockCryptoSetup) LockForSealing()              { panic("not implemented") }
+func (mockCryptoSetup) UnlockForSealing()            { panic("not implemented") }
+func (mockCryptoSetup) HandshakeComplete() bool      { panic("not implemented") }
+
 var _ = Describe("Packet unpacker", func() {
 	var (
 		unpacker *packetUnpacker
 		hdr      *PublicHeader
 		hdrBin   []byte
-		cs       *handshake.CryptoSetup
+		cs       handshake.CryptoSetup
 		data     []byte
 		buf      *bytes.Buffer
 	)
 
 	BeforeEach(func() {
-		cs = &handshake.CryptoSetup{}
+		cs = &mockCryptoSetup{}
 		hdr = &PublicHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
@@ -35,7 +55,7 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	setData := func(p []byte) {
-		data = cs.Seal(nil, p, 0, hdrBin)
+		cs.(*mockCryptoSetup).data = p
 	}
 
 	It("does not read read a private flag for QUIC Version >= 34", func() {

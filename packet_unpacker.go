@@ -13,7 +13,7 @@ import (
 
 type packetUnpacker struct {
 	version protocol.VersionNumber
-	cs      *handshake.CryptoSetup
+	cs      handshake.CryptoSetup
 }
 
 func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
