@@ -11,7 +11,9 @@ import (
 )
 
 type packedPacket struct {
-	number protocol.PacketNumber
+	number          protocol.PacketNumber
+	encryptionLevel protocol.EncryptionLevel
+
 	raw    []byte
 	frames []frames.Frame
 }
@@ -137,9 +139,10 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	return &packedPacket{
-		number: currentPacketNumber,
-		raw:    raw,
-		frames: payloadFrames,
+		encryptionLevel: p.cryptoSetup.LastSealingEncryptionLevel(),
+		number:          currentPacketNumber,
+		raw:             raw,
+		frames:          payloadFrames,
 	}, nil
 }
 

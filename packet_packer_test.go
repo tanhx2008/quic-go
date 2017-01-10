@@ -57,6 +57,17 @@ var _ = Describe("Packet packer", func() {
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 	})
 
+	It("saves the encryption level used to encrypt the packet", func() {
+		f := &frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
+		}
+		streamFramer.AddFrameForRetransmission(f)
+		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+	})
+
 	It("packs a ConnectionClose", func() {
 		ccf := frames.ConnectionCloseFrame{
 			ErrorCode:    0x1337,

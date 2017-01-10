@@ -573,6 +573,7 @@ var _ = Describe("Crypto setup", func() {
 		Context("null encryption", func() {
 			It("is used initially", func() {
 				Expect(cs.Seal(nil, []byte("foobar"), 0, []byte{})).To(Equal(foobarFNVSigned))
+				Expect(cs.LastSealingEncryptionLevel()).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is accepted initially", func() {
@@ -602,6 +603,7 @@ var _ = Describe("Crypto setup", func() {
 				doCHLO()
 				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).ToNot(Equal(foobarFNVSigned))
+				Expect(cs.LastSealingEncryptionLevel()).ToNot(Equal(protocol.EncryptionUnencrypted))
 			})
 		})
 
@@ -610,6 +612,7 @@ var _ = Describe("Crypto setup", func() {
 				doCHLO()
 				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
+				Expect(cs.LastSealingEncryptionLevel()).To(Equal(protocol.EncryptionSecure))
 			})
 
 			It("is accepted after CHLO", func() {
@@ -625,6 +628,7 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).ToNot(HaveOccurred())
 				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
+				Expect(cs.LastSealingEncryptionLevel()).To(Equal(protocol.EncryptionForwardSecure))
 			})
 
 			It("is not accepted after receiving forward secure packet", func() {
@@ -643,6 +647,7 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).ToNot(HaveOccurred())
 				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
+				Expect(cs.LastSealingEncryptionLevel()).To(Equal(protocol.EncryptionForwardSecure))
 			})
 		})
 	})

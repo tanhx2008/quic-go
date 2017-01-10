@@ -33,6 +33,7 @@ type CryptoSetup struct {
 	receivedForwardSecurePacket bool
 	receivedSecurePacket        bool
 	aeadChanged                 chan struct{}
+	lastSealingEncryptionLevel  protocol.EncryptionLevel
 
 	keyDerivation KeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -183,12 +184,20 @@ func (h *CryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, 
 // Seal a message, call LockForSealing() before!
 func (h *CryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 	if h.receivedForwardSecurePacket {
+		h.lastSealingEncryptionLevel = protocol.EncryptionForwardSecure
 		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
 	} else if h.secureAEAD != nil {
+		h.lastSealingEncryptionLevel = protocol.EncryptionSecure
 		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
 	} else {
+		h.lastSealingEncryptionLevel = protocol.EncryptionUnencrypted
 		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
 	}
+}
+
+// LastSealingEncryptionLevel get the encryption level that was used for sealing the last packet
+func (h *CryptoSetup) LastSealingEncryptionLevel() protocol.EncryptionLevel {
+	return h.lastSealingEncryptionLevel
 }
 
 func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byte) bool {
