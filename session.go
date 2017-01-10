@@ -268,16 +268,19 @@ func (s *Session) handlePacketImpl(p *receivedPacket) error {
 		s.largestRcvdPacketNumber,
 		hdr.PacketNumber,
 	)
-	if utils.Debug() {
-		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x @ %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID, time.Now().Format("15:04:05.000"))
-	}
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(p.remoteAddr)
 
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
 	if err != nil {
+		if utils.Debug() {
+			utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x @ %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID, time.Now().Format("15:04:05.000"))
+		}
 		return err
+	}
+	if utils.Debug() {
+		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x, %s @ %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID, packet.encryptionLevel, time.Now().Format("15:04:05.000"))
 	}
 
 	s.lastRcvdPacketNumber = hdr.PacketNumber
@@ -569,7 +572,7 @@ func (s *Session) logPacket(packet *packedPacket) {
 		return
 	}
 	if utils.Debug() {
-		utils.Debugf("-> Sending packet 0x%x (%d bytes) @ %s", packet.number, len(packet.raw), time.Now().Format("15:04:05.000"))
+		utils.Debugf("-> Sending packet 0x%x (%d bytes), %s, @ %s", packet.number, len(packet.raw), packet.encryptionLevel, time.Now().Format("15:04:05.000"))
 		for _, frame := range packet.frames {
 			frames.LogFrame(frame, true)
 		}
