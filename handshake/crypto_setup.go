@@ -34,6 +34,7 @@ type CryptoSetup struct {
 	receivedSecurePacket        bool
 	aeadChanged                 chan struct{}
 	lastSealingEncryptionLevel  protocol.EncryptionLevel
+	lastOpeningEncryptionLevel  protocol.EncryptionLevel
 
 	keyDerivation KeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -159,6 +160,7 @@ func (h *CryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, 
 	defer h.mutex.RUnlock()
 
 	if h.forwardSecureAEAD != nil {
+		h.lastOpeningEncryptionLevel = protocol.EncryptionForwardSecure
 		res, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedForwardSecurePacket = true
@@ -169,6 +171,7 @@ func (h *CryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, 
 		}
 	}
 	if h.secureAEAD != nil {
+		h.lastOpeningEncryptionLevel = protocol.EncryptionSecure
 		res, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedSecurePacket = true
@@ -178,6 +181,7 @@ func (h *CryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, 
 			return nil, err
 		}
 	}
+	h.lastOpeningEncryptionLevel = protocol.EncryptionUnencrypted
 	return (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
 }
 
@@ -198,6 +202,11 @@ func (h *CryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, 
 // LastSealingEncryptionLevel get the encryption level that was used for sealing the last packet
 func (h *CryptoSetup) LastSealingEncryptionLevel() protocol.EncryptionLevel {
 	return h.lastSealingEncryptionLevel
+}
+
+// LastOpeningEncryptionLevel get the encryption level that was used for sealing the last packet
+func (h *CryptoSetup) LastOpeningEncryptionLevel() protocol.EncryptionLevel {
+	return h.lastOpeningEncryptionLevel
 }
 
 func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byte) bool {

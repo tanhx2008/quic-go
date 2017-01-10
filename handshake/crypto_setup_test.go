@@ -580,6 +580,7 @@ var _ = Describe("Crypto setup", func() {
 				d, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar")))
+				Expect(cs.LastOpeningEncryptionLevel()).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is still accepted after CHLO", func() {
@@ -587,6 +588,7 @@ var _ = Describe("Crypto setup", func() {
 				Expect(cs.secureAEAD).ToNot(BeNil())
 				_, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.LastOpeningEncryptionLevel()).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is not accepted after receiving secure packet", func() {
@@ -594,6 +596,7 @@ var _ = Describe("Crypto setup", func() {
 				Expect(cs.secureAEAD).ToNot(BeNil())
 				d, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.LastOpeningEncryptionLevel()).To(Equal(protocol.EncryptionSecure))
 				Expect(d).To(Equal([]byte("decrypted")))
 				_, err = cs.Open(nil, foobarFNVSigned, 0, []byte{})
 				Expect(err).To(MatchError("authentication failed"))
@@ -620,12 +623,14 @@ var _ = Describe("Crypto setup", func() {
 				d, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("decrypted")))
+				Expect(cs.LastOpeningEncryptionLevel()).To(Equal(protocol.EncryptionSecure))
 			})
 
 			It("is not used after receiving forward secure packet", func() {
 				doCHLO()
 				_, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.LastOpeningEncryptionLevel()).To(Equal(protocol.EncryptionForwardSecure))
 				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 				Expect(cs.LastSealingEncryptionLevel()).To(Equal(protocol.EncryptionForwardSecure))
@@ -635,6 +640,7 @@ var _ = Describe("Crypto setup", func() {
 				doCHLO()
 				_, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.LastOpeningEncryptionLevel()).To(Equal(protocol.EncryptionForwardSecure))
 				_, err = cs.Open(nil, []byte("encrypted"), 0, []byte{})
 				Expect(err).To(MatchError("authentication failed"))
 			})
@@ -645,6 +651,7 @@ var _ = Describe("Crypto setup", func() {
 				doCHLO()
 				_, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.LastOpeningEncryptionLevel()).To(Equal(protocol.EncryptionForwardSecure))
 				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 				Expect(cs.LastSealingEncryptionLevel()).To(Equal(protocol.EncryptionForwardSecure))

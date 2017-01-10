@@ -140,7 +140,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	session.streamFramer = newStreamFramer(session.streamsMap, flowControlManager)
 	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, v)
-	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
+	session.unpacker = &packetUnpacker{cs: session.cryptoSetup, version: v}
 
 	return session, err
 }

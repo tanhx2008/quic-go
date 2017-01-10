@@ -3,8 +3,8 @@ package quic
 import (
 	"bytes"
 
-	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 
@@ -17,25 +17,25 @@ var _ = Describe("Packet unpacker", func() {
 		unpacker *packetUnpacker
 		hdr      *PublicHeader
 		hdrBin   []byte
-		aead     crypto.AEAD
+		cs       *handshake.CryptoSetup
 		data     []byte
 		buf      *bytes.Buffer
 	)
 
 	BeforeEach(func() {
-		aead = &crypto.NullAEAD{}
+		cs = &handshake.CryptoSetup{}
 		hdr = &PublicHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
 		}
 		hdrBin = []byte{0x04, 0x4c, 0x01}
-		unpacker = &packetUnpacker{aead: aead}
+		unpacker = &packetUnpacker{cs: cs}
 		data = nil
 		buf = &bytes.Buffer{}
 	})
 
 	setData := func(p []byte) {
-		data = aead.Seal(nil, p, 0, hdrBin)
+		data = cs.Seal(nil, p, 0, hdrBin)
 	}
 
 	It("does not read read a private flag for QUIC Version >= 34", func() {
@@ -46,6 +46,19 @@ var _ = Describe("Packet unpacker", func() {
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{f}))
+	})
+
+	It("stores the encryption level", func() {
+		f := &frames.StreamFrame{
+			StreamID: 1,
+			Data:     []byte("foobar"),
+		}
+		err := f.Write(buf, 0)
+		Expect(err).ToNot(HaveOccurred())
+		setData(buf.Bytes())
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 	})
 
 	It("unpacks stream frames", func() {
