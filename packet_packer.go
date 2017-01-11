@@ -130,7 +130,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	raw = raw[0:buffer.Len()]
-	p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
+	_, encLevel := p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+12]
 
 	num := p.packetNumberGenerator.Pop()
@@ -139,7 +139,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	return &packedPacket{
-		encryptionLevel: p.cryptoSetup.LastSealingEncryptionLevel(),
+		encryptionLevel: encLevel,
 		number:          currentPacketNumber,
 		raw:             raw,
 		frames:          payloadFrames,

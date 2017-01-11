@@ -33,8 +33,6 @@ type cryptoSetupServer struct {
 	receivedForwardSecurePacket bool
 	receivedSecurePacket        bool
 	aeadChanged                 chan struct{}
-	lastSealingEncryptionLevel  protocol.EncryptionLevel
-	lastOpeningEncryptionLevel  protocol.EncryptionLevel
 
 	keyDerivation KeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -155,58 +153,43 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 }
 
 // Open a message
-func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
 	if h.forwardSecureAEAD != nil {
-		h.lastOpeningEncryptionLevel = protocol.EncryptionForwardSecure
 		res, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedForwardSecurePacket = true
-			return res, nil
+			return res, protocol.EncryptionForwardSecure, nil
 		}
 		if h.receivedForwardSecurePacket {
-			return nil, err
+			return nil, protocol.EncryptionUnspecified, err
 		}
 	}
 	if h.secureAEAD != nil {
-		h.lastOpeningEncryptionLevel = protocol.EncryptionSecure
 		res, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedSecurePacket = true
-			return res, nil
+			return res, protocol.EncryptionSecure, nil
 		}
 		if h.receivedSecurePacket {
-			return nil, err
+			return nil, protocol.EncryptionUnspecified, err
 		}
 	}
-	h.lastOpeningEncryptionLevel = protocol.EncryptionUnencrypted
-	return (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
+	res, err := (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
+	return res, protocol.EncryptionUnencrypted, err
 }
 
 // Seal a message, call LockForSealing() before!
-func (h *cryptoSetupServer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+func (h *cryptoSetupServer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
 	if h.receivedForwardSecurePacket {
-		h.lastSealingEncryptionLevel = protocol.EncryptionForwardSecure
-		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure
 	} else if h.secureAEAD != nil {
-		h.lastSealingEncryptionLevel = protocol.EncryptionSecure
-		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure
 	} else {
-		h.lastSealingEncryptionLevel = protocol.EncryptionUnencrypted
-		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
 	}
-}
-
-// LastSealingEncryptionLevel get the encryption level that was used for sealing the last packet
-func (h *cryptoSetupServer) LastSealingEncryptionLevel() protocol.EncryptionLevel {
-	return h.lastSealingEncryptionLevel
-}
-
-// LastOpeningEncryptionLevel get the encryption level that was used for sealing the last packet
-func (h *cryptoSetupServer) LastOpeningEncryptionLevel() protocol.EncryptionLevel {
-	return h.lastOpeningEncryptionLevel
 }
 
 func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byte) bool {

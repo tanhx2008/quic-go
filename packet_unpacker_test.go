@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 
@@ -13,31 +12,29 @@ import (
 )
 
 type mockCryptoSetup struct {
-	data []byte
+	data            []byte
+	divNonce        []byte
+	encryptionLevel protocol.EncryptionLevel
 }
 
 func (mockCryptoSetup) HandleCryptoStream() error { panic("not implemented") }
-func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
-	return m.data, nil
+func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
+	return m.data, m.encryptionLevel, nil
 }
-func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	panic("not implemented")
+func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
+	return append(bytes.Repeat([]byte{'f'}, 12), src...), m.encryptionLevel
 }
-func (mockCryptoSetup) LastSealingEncryptionLevel() protocol.EncryptionLevel { panic("not implemented") }
-func (mockCryptoSetup) LastOpeningEncryptionLevel() protocol.EncryptionLevel {
-	return protocol.EncryptionUnencrypted
-}
-func (mockCryptoSetup) DiversificationNonce() []byte { panic("not implemented") }
-func (mockCryptoSetup) LockForSealing()              { panic("not implemented") }
-func (mockCryptoSetup) UnlockForSealing()            { panic("not implemented") }
-func (mockCryptoSetup) HandshakeComplete() bool      { panic("not implemented") }
+func (m *mockCryptoSetup) DiversificationNonce() []byte { return m.divNonce }
+func (mockCryptoSetup) LockForSealing()                 {}
+func (mockCryptoSetup) UnlockForSealing()               {}
+func (mockCryptoSetup) HandshakeComplete() bool         { panic("not implemented") }
 
 var _ = Describe("Packet unpacker", func() {
 	var (
 		unpacker *packetUnpacker
 		hdr      *PublicHeader
 		hdrBin   []byte
-		cs       handshake.CryptoSetup
+		cs       *mockCryptoSetup
 		data     []byte
 		buf      *bytes.Buffer
 	)
@@ -55,7 +52,7 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	setData := func(p []byte) {
-		cs.(*mockCryptoSetup).data = p
+		cs.data = p
 	}
 
 	It("does not read read a private flag for QUIC Version >= 34", func() {
@@ -69,6 +66,7 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("stores the encryption level", func() {
+		cs.encryptionLevel = protocol.EncryptionSecure
 		f := &frames.StreamFrame{
 			StreamID: 1,
 			Data:     []byte("foobar"),
@@ -78,7 +76,7 @@ var _ = Describe("Packet unpacker", func() {
 		setData(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 	})
 
 	It("unpacks stream frames", func() {

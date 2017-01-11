@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -15,6 +14,7 @@ var _ = Describe("Packet packer", func() {
 		packer          *packetPacker
 		publicHeaderLen protocol.ByteCount
 		streamFramer    *streamFramer
+		cs              *mockCryptoSetup
 	)
 
 	BeforeEach(func() {
@@ -25,8 +25,7 @@ var _ = Describe("Packet packer", func() {
 
 		cpm := &mockConnectionParametersManager{}
 		streamFramer = newStreamFramer(newStreamsMap(nil, cpm), fcm)
-		cs, err := handshake.NewCryptoSetup(0, nil, protocol.VersionWhatever, nil, nil, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
+		cs = &mockCryptoSetup{}
 
 		packer = &packetPacker{
 			cryptoSetup:           cs,
@@ -60,6 +59,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("saves the encryption level used to encrypt the packet", func() {
+		cs.encryptionLevel = protocol.EncryptionSecure
 		f := &frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
@@ -67,7 +67,7 @@ var _ = Describe("Packet packer", func() {
 		streamFramer.AddFrameForRetransmission(f)
 		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+		Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 	})
 
 	It("packs a ConnectionClose", func() {
