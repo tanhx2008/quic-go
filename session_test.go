@@ -84,7 +84,7 @@ func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Pac
 	return nil
 }
 
-func newMockSentPacketHandler() ackhandler.SentPacketHandler {
+func newMockSentPacketHandler() *mockSentPacketHandler {
 	return &mockSentPacketHandler{}
 }
 
@@ -649,92 +649,138 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("retransmissions", func() {
-		It("sends a StreamFrame from a packet queued for retransmission", func() {
-			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			session.packer.packetNumberGenerator.next = 0x1337 + 9
+		Context("for packets sent after the handshake", func() {
+			It("sends a StreamFrame from a packet queued for retransmission", func() {
+				// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+				session.packer.packetNumberGenerator.next = 0x1337 + 9
 
-			f := frames.StreamFrame{
-				StreamID: 0x5,
-				Data:     []byte("foobar1234567"),
-			}
-			p := ackhandler.Packet{
-				PacketNumber: 0x1337,
-				Frames:       []frames.Frame{&f},
-			}
-			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p}
-			session.sentPacketHandler = sph
+				f := frames.StreamFrame{
+					StreamID: 0x5,
+					Data:     []byte("foobar1234567"),
+				}
+				p := ackhandler.Packet{
+					PacketNumber: 0x1337,
+					Frames:       []frames.Frame{&f},
+				}
+				sph := newMockSentPacketHandler()
+				sph.retransmissionQueue = []*ackhandler.Packet{&p}
+				session.sentPacketHandler = sph
 
-			err := session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
-			Expect(sph.(*mockSentPacketHandler).requestedStopWaiting).To(BeTrue())
-			Expect(conn.written[0]).To(ContainSubstring("foobar1234567"))
+				err := session.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(conn.written).To(HaveLen(1))
+				Expect(sph.requestedStopWaiting).To(BeTrue())
+				Expect(conn.written[0]).To(ContainSubstring("foobar1234567"))
+			})
+
+			It("sends a StreamFrame from a packet queued for retransmission", func() {
+				// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+				session.packer.packetNumberGenerator.next = 0x1337 + 9
+
+				f1 := frames.StreamFrame{
+					StreamID: 0x5,
+					Data:     []byte("foobar"),
+				}
+				f2 := frames.StreamFrame{
+					StreamID: 0x7,
+					Data:     []byte("loremipsum"),
+				}
+				p1 := ackhandler.Packet{
+					PacketNumber:    0x1337,
+					Frames:          []frames.Frame{&f1},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				}
+				p2 := ackhandler.Packet{
+					PacketNumber:    0x1338,
+					Frames:          []frames.Frame{&f2},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				}
+				sph := newMockSentPacketHandler()
+				sph.retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
+				session.sentPacketHandler = sph
+
+				err := session.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(conn.written).To(HaveLen(1))
+				Expect(conn.written[0]).To(ContainSubstring("foobar"))
+				Expect(conn.written[0]).To(ContainSubstring("loremipsum"))
+			})
+
+			It("always attaches a StopWaiting to a packet that contains a retransmission", func() {
+				// make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+				session.packer.packetNumberGenerator.next = 0x1337 + 9
+
+				f := &frames.StreamFrame{
+					StreamID: 0x5,
+					Data:     bytes.Repeat([]byte{'f'}, int(1.5*float32(protocol.MaxPacketSize))),
+				}
+				session.streamFramer.AddFrameForRetransmission(f)
+
+				sph := newMockSentPacketHandler()
+				session.sentPacketHandler = sph
+
+				err := session.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(conn.written).To(HaveLen(2))
+				sentPackets := sph.sentPackets
+				Expect(sentPackets).To(HaveLen(2))
+				_, ok := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
+				Expect(ok).To(BeTrue())
+				_, ok = sentPackets[1].Frames[0].(*frames.StopWaitingFrame)
+				Expect(ok).To(BeTrue())
+			})
+
+			It("calls MaybeQueueRTOs even if congestion blocked, so that bytesInFlight is updated", func() {
+				sph := newMockSentPacketHandler()
+				sph.congestionLimited = true
+				session.sentPacketHandler = sph
+				err := session.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(sph.maybeQueueRTOsCalled).To(BeTrue())
+			})
 		})
 
-		It("sends a StreamFrame from a packet queued for retransmission", func() {
-			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			session.packer.packetNumberGenerator.next = 0x1337 + 9
+		Context("for handshake packets", func() {
+			var sph *mockSentPacketHandler
 
-			f1 := frames.StreamFrame{
-				StreamID: 0x5,
-				Data:     []byte("foobar"),
-			}
-			f2 := frames.StreamFrame{
-				StreamID: 0x7,
-				Data:     []byte("loremipsum"),
-			}
-			p1 := ackhandler.Packet{
-				PacketNumber: 0x1337,
-				Frames:       []frames.Frame{&f1},
-			}
-			p2 := ackhandler.Packet{
-				PacketNumber: 0x1338,
-				Frames:       []frames.Frame{&f2},
-			}
-			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
-			session.sentPacketHandler = sph
+			BeforeEach(func() {
+				session.packer.packetNumberGenerator.next = 0x1337 + 10
+				sph = newMockSentPacketHandler()
+				session.sentPacketHandler = sph
+			})
 
-			err := session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
-			Expect(conn.written[0]).To(ContainSubstring("foobar"))
-			Expect(conn.written[0]).To(ContainSubstring("loremipsum"))
+			It("retransmits an unencrypted packet", func() {
+				sf := &frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}
+				sph.retransmissionQueue = []*ackhandler.Packet{{
+					Frames:          []frames.Frame{sf},
+					EncryptionLevel: protocol.EncryptionUnencrypted,
+				}}
+				err := session.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(conn.written).To(HaveLen(1))
+				sentPackets := sph.sentPackets
+				Expect(sentPackets).To(HaveLen(1))
+				Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+				Expect(sentPackets[0].Frames).To(HaveLen(2))
+				Expect(sentPackets[0].Frames[1]).To(Equal(sf))
+				swf := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
+				Expect(swf.LeastUnacked).To(Equal(protocol.PacketNumber(0x1337)))
+			})
+
+			It("doesn't retransmit non-retransmittable packets", func() {
+				sph.retransmissionQueue = []*ackhandler.Packet{{
+					Frames: []frames.Frame{
+						&frames.AckFrame{},
+						&frames.StopWaitingFrame{},
+					},
+					EncryptionLevel: protocol.EncryptionUnencrypted,
+				}}
+				err := session.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(conn.written).To(BeEmpty())
+			})
 		})
 
-		It("always attaches a StopWaiting to a packet that contains a retransmission", func() {
-			// make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			session.packer.packetNumberGenerator.next = 0x1337 + 9
-
-			f := &frames.StreamFrame{
-				StreamID: 0x5,
-				Data:     bytes.Repeat([]byte{'f'}, int(1.5*float32(protocol.MaxPacketSize))),
-			}
-			session.streamFramer.AddFrameForRetransmission(f)
-
-			sph := newMockSentPacketHandler()
-			session.sentPacketHandler = sph
-
-			err := session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(2))
-			sentPackets := sph.(*mockSentPacketHandler).sentPackets
-			Expect(sentPackets).To(HaveLen(2))
-			_, ok := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
-			Expect(ok).To(BeTrue())
-			_, ok = sentPackets[1].Frames[0].(*frames.StopWaitingFrame)
-			Expect(ok).To(BeTrue())
-		})
-
-		It("calls MaybeQueueRTOs even if congestion blocked, so that bytesInFlight is updated", func() {
-			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).congestionLimited = true
-			session.sentPacketHandler = sph
-			err := session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sph.(*mockSentPacketHandler).maybeQueueRTOsCalled).To(BeTrue())
-		})
 	})
 
 	Context("scheduling sending", func() {

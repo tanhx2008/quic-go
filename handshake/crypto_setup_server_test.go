@@ -194,8 +194,8 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.DiversificationNonce()).To(HaveLen(32))
 		})
 
-		It("does not return nonce for FS packets", func() {
-			cs.receivedForwardSecurePacket = true
+		It("does not return nonce after sending the SHLO", func() {
+			cs.sentSHLO = true
 			Expect(cs.DiversificationNonce()).To(BeEmpty())
 		})
 
@@ -636,17 +636,6 @@ var _ = Describe("Crypto setup", func() {
 				Expect(enc).To(Equal(protocol.EncryptionSecure))
 			})
 
-			It("is not used after receiving forward secure packet", func() {
-				doCHLO()
-				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				d, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(d).To(Equal([]byte("foobar forward sec")))
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-			})
-
 			It("is not accepted after receiving forward secure packet", func() {
 				doCHLO()
 				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
@@ -659,15 +648,27 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		Context("forward secure encryption", func() {
-			It("is used after receiving forward secure packet", func() {
+			It("is used after sending out one packet with initial encryption", func() {
 				doCHLO()
-				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
+				_, enc, err := cs.Seal(nil, []byte("SHLO"), 0, []byte{}, protocol.EncryptionUnspecified)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
 				d, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+			})
+
+			It("regards the handshake as complete once it receives a forward encrypted packet", func() {
+				doCHLO()
+				_, _, err := cs.Seal(nil, []byte("SHLO"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).ToNot(HaveOccurred())
+				_, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+				Expect(cs.HandshakeComplete()).To(BeFalse())
+				cs.receivedForwardSecurePacket = true
+				Expect(cs.HandshakeComplete()).To(BeTrue())
 			})
 		})
 

@@ -500,12 +500,30 @@ func (s *Session) sendPacket() error {
 			if retransmitPacket == nil {
 				break
 			}
-			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
-			// resend the frames that were in the packet
-			controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
-			for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
-				s.streamFramer.AddFrameForRetransmission(streamFrame)
+			if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
+				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+				stopWaitingFrame := s.sentPacketHandler.GetStopWaitingFrame(true)
+				var packet *packedPacket
+				packet, err = s.packer.RetransmitNonForwardSecurePacket(stopWaitingFrame, retransmitPacket)
+				if err != nil {
+					return err
+				}
+				if packet == nil {
+					continue
+				}
+				err = s.sendPackedPacket(packet)
+				if err != nil {
+					return err
+				}
+				continue
+			} else {
+				utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+				// resend the frames that were in the packet
+				controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
+				for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
+					s.streamFramer.AddFrameForRetransmission(streamFrame)
+				}
 			}
 		}
 
@@ -537,24 +555,30 @@ func (s *Session) sendPacket() error {
 			s.packer.QueueControlFrameForNextPacket(f)
 		}
 
-		err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
-			PacketNumber: packet.number,
-			Frames:       packet.frames,
-			Length:       protocol.ByteCount(len(packet.raw)),
-		})
-		if err != nil {
-			return err
-		}
-
-		s.logPacket(packet)
-
-		err = s.conn.write(packet.raw)
-		putPacketBuffer(packet.raw)
+		err = s.sendPackedPacket(packet)
 		if err != nil {
 			return err
 		}
 		s.nextAckScheduledTime = time.Time{}
 	}
+}
+
+func (s *Session) sendPackedPacket(packet *packedPacket) error {
+	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
+		PacketNumber:    packet.number,
+		Frames:          packet.frames,
+		Length:          protocol.ByteCount(len(packet.raw)),
+		EncryptionLevel: packet.encryptionLevel,
+	})
+	if err != nil {
+		return err
+	}
+
+	s.logPacket(packet)
+
+	err = s.conn.write(packet.raw)
+	putPacketBuffer(packet.raw)
+	return err
 }
 
 func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
