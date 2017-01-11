@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -182,13 +183,28 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 }
 
 // Seal a message, call LockForSealing() before!
-func (h *cryptoSetupServer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
+func (h *cryptoSetupServer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, forceEncryptionLevel protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error) {
+	switch forceEncryptionLevel {
+	case protocol.EncryptionUnencrypted:
+		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted, nil
+	case protocol.EncryptionSecure:
+		if h.secureAEAD == nil {
+			return nil, protocol.EncryptionUnspecified, errors.New("CryptoSetup BUG: no secureAEAD")
+		}
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure, nil
+	case protocol.EncryptionForwardSecure:
+		if h.forwardSecureAEAD == nil {
+			return nil, protocol.EncryptionUnspecified, errors.New("CryptoSetup BUG: no forwardSecureAEAD")
+		}
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure, nil
+	}
+
 	if h.receivedForwardSecurePacket {
-		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure, nil
 	} else if h.secureAEAD != nil {
-		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure, nil
 	} else {
-		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
+		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted, nil
 	}
 }
 

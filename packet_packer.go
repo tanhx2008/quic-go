@@ -135,8 +135,12 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		return nil, errors.New("PacketPacker BUG: packet too large")
 	}
 
+	var forceEncLevel protocol.EncryptionLevel
 	raw = raw[0:buffer.Len()]
-	_, encLevel := p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
+	_, encLevel, err := p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex], forceEncLevel)
+	if err != nil {
+		return nil, err
+	}
 	raw = raw[0 : buffer.Len()+12]
 
 	num := p.packetNumberGenerator.Pop()

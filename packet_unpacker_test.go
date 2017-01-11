@@ -21,8 +21,8 @@ func (mockCryptoSetup) HandleCryptoStream() error { panic("not implemented") }
 func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
 	return m.data, m.encryptionLevel, nil
 }
-func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
-	return append(bytes.Repeat([]byte{'f'}, 12), src...), m.encryptionLevel
+func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, _ protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error) {
+	return append(bytes.Repeat([]byte{'f'}, 12), src...), m.encryptionLevel, nil
 }
 func (m *mockCryptoSetup) DiversificationNonce() []byte { return m.divNonce }
 func (mockCryptoSetup) LockForSealing()                 {}

@@ -577,7 +577,8 @@ var _ = Describe("Crypto setup", func() {
 
 		Context("null encryption", func() {
 			It("is used initially", func() {
-				data, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				data, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal(foobarFNVSigned))
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
@@ -611,7 +612,8 @@ var _ = Describe("Crypto setup", func() {
 
 			It("is not used after CHLO", func() {
 				doCHLO()
-				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(d).ToNot(Equal(foobarFNVSigned))
 				Expect(enc).ToNot(Equal(protocol.EncryptionUnencrypted))
 			})
@@ -620,7 +622,8 @@ var _ = Describe("Crypto setup", func() {
 		Context("initial encryption", func() {
 			It("is used after CHLO", func() {
 				doCHLO()
-				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
 				Expect(enc).To(Equal(protocol.EncryptionSecure))
 			})
@@ -638,7 +641,8 @@ var _ = Describe("Crypto setup", func() {
 				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 			})
@@ -660,9 +664,35 @@ var _ = Describe("Crypto setup", func() {
 				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+			})
+		})
+
+		Context("forcing the encrytion level for sealing", func() {
+			It("sends an unencrypted message", func() {
+				data, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnencrypted)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(data).To(Equal(foobarFNVSigned))
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+			})
+
+			It("sends an encrypted message", func() {
+				cs.secureAEAD = &mockAEAD{}
+				d, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionSecure)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("foobar  normal sec")))
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
+			})
+
+			It("sends a forward-secure encrypted message", func() {
+				cs.forwardSecureAEAD = &mockAEAD{forwardSecure: true}
+				d, enc, err := cs.Seal(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionForwardSecure)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+				Expect(d).To(Equal([]byte("foobar forward sec")))
 			})
 		})
 	})
