@@ -32,7 +32,7 @@ type cryptoSetupServer struct {
 	forwardSecureAEAD           crypto.AEAD
 	receivedForwardSecurePacket bool
 	receivedSecurePacket        bool
-	aeadChanged                 chan struct{}
+	aeadChanged                 chan protocol.EncryptionLevel
 
 	keyDerivation KeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -54,7 +54,7 @@ func NewCryptoSetup(
 	scfg *ServerConfig,
 	cryptoStream utils.Stream,
 	connectionParametersManager ConnectionParametersManager,
-	aeadChanged chan struct{},
+	aeadChanged chan protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
 	return &cryptoSetupServer{
 		connID:               connID,
@@ -310,6 +310,8 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		return nil, err
 	}
 
+	h.aeadChanged <- protocol.EncryptionSecure
+
 	// Generate a new curve instance to derive the forward secure key
 	var fsNonce bytes.Buffer
 	fsNonce.Write(clientNonce)
@@ -349,7 +351,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	WriteHandshakeMessage(&reply, TagSHLO, replyMap)
 	utils.Debugf("Sending SHLO:\n%s", printHandshakeMessage(cryptoData))
 
-	h.aeadChanged <- struct{}{}
+	h.aeadChanged <- protocol.EncryptionForwardSecure
 
 	return reply.Bytes(), nil
 }

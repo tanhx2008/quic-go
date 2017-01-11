@@ -828,6 +828,14 @@ var _ = Describe("Session", func() {
 		})
 	})
 
+	It("tells the packetPacker when forward-secure encryption is used", func() {
+		go session.run()
+		session.aeadChanged <- protocol.EncryptionSecure
+		Consistently(func() bool { return session.packer.isForwardSecure }).Should(BeFalse())
+		session.aeadChanged <- protocol.EncryptionForwardSecure
+		Eventually(func() bool { return session.packer.isForwardSecure }).Should(BeTrue())
+	})
+
 	It("closes when crypto stream errors", func() {
 		go session.run()
 		s, err := session.GetOrOpenStream(3)

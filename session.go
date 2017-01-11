@@ -74,7 +74,7 @@ type Session struct {
 	closed    uint32 // atomic bool
 
 	undecryptablePackets []*receivedPacket
-	aeadChanged          chan struct{}
+	aeadChanged          chan protocol.EncryptionLevel
 
 	nextAckScheduledTime time.Time
 
@@ -120,7 +120,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		closeChan:            make(chan *qerr.QuicError, 1),
 		sendingScheduled:     make(chan struct{}, 1),
 		undecryptablePackets: make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets),
-		aeadChanged:          make(chan struct{}, 1),
+		aeadChanged:          make(chan protocol.EncryptionLevel, 2),
 		runClosed:            make(chan struct{}, 1), // this channel will receive once the run loop has been stopped
 
 		timer: time.NewTimer(0),
@@ -191,7 +191,10 @@ runLoop:
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
 			putPacketBuffer(p.publicHeader.Raw)
-		case <-s.aeadChanged:
+		case encLevel := <-s.aeadChanged:
+			if encLevel == protocol.EncryptionForwardSecure {
+				s.packer.SetForwardSecure()
+			}
 			s.tryDecryptingQueuedPackets()
 		}
 

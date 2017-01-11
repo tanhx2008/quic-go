@@ -22,6 +22,8 @@ type packetPacker struct {
 	connectionID protocol.ConnectionID
 	version      protocol.VersionNumber
 	cryptoSetup  handshake.CryptoSetup
+	// as long as packets are not sent with forward-secure encryption, we limit the MaxPacketSize such that they can be retransmitted as a whole
+	isForwardSecure bool
 
 	packetNumberGenerator *packetNumberGenerator
 
@@ -95,6 +97,9 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		payloadFrames = []frames.Frame{p.controlFrames[0]}
 	} else {
 		maxSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
+		if !p.isForwardSecure {
+			maxSize -= protocol.NonForwardSecurePacketSizeReduction
+		}
 		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, maxSize)
 		if err != nil {
 			return nil, err
@@ -199,4 +204,8 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 func (p *packetPacker) QueueControlFrameForNextPacket(f frames.Frame) {
 	p.controlFrames = append(p.controlFrames, f)
+}
+
+func (p *packetPacker) SetForwardSecure() {
+	p.isForwardSecure = true
 }
