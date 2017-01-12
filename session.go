@@ -516,6 +516,10 @@ func (s *Session) sendPacket() error {
 				if err != nil {
 					return err
 				}
+				err = s.sendPackedPacket(packet)
+				if err != nil {
+					return err
+				}
 				continue
 			} else {
 				utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
