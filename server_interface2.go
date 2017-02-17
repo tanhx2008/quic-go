@@ -21,11 +21,14 @@ type Config struct {
 type Listener interface {
 	Close() error
 	Addr() net.Addr
-  ListenAddr(addr string) error
-  Listen(conn net.PacketConn) error
+  // if config.ConnState is set, returns immediately when a new connection is established
+  // if config.ConnState is nil, returns when a new connection is forward-secure
+  Accept() (Session, error)
 }
 
-func NewListener(config *Config) (Listener, error)
+func Listen(packetconn, config *Config) (Listener, error)
+func ListenAddr(addr string, config *Config) (Listener, error)
+
 
 // If config.ConnState is set, returns immediately after a version was negotiated.
 // If config.ConnState is nil, returns only after a fordward secure connection is established.
