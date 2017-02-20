@@ -23,7 +23,7 @@ type Listener interface {
 	Addr() net.Addr
   // if config.ConnState is set, returns immediately when a new connection is established
   // if config.ConnState is nil, returns when a new connection is forward-secure
-  Accept() (Session, error)
+  Serve() (error)
 }
 
 func Listen(packetconn, config *Config) (Listener, error)
