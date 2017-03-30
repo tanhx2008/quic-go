@@ -151,7 +151,6 @@ var _ = Describe("Crypto setup", func() {
 		aeadChanged chan protocol.EncryptionLevel
 		nonce32     []byte
 		versionTag  []byte
-		sourceAddr  []byte
 		validSTK    []byte
 		aead        []byte
 		kexs        []byte
@@ -159,8 +158,8 @@ var _ = Describe("Crypto setup", func() {
 
 	BeforeEach(func() {
 		var err error
-		sourceAddr = net.ParseIP("1.2.3.4")
-		validSTK, err = mockStkSource{}.NewToken(sourceAddr)
+		remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
+		validSTK, err = mockStkSource{}.NewToken(remoteAddr.IP)
 		Expect(err).NotTo(HaveOccurred())
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
@@ -179,7 +178,7 @@ var _ = Describe("Crypto setup", func() {
 		scfg.stkSource = &mockStkSource{}
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever)
-		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), sourceAddr, v, scfg, stream, cpm, aeadChanged)
+		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), remoteAddr, v, scfg, stream, cpm, aeadChanged)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
 		cs.keyDerivation = mockKeyDerivation
@@ -199,6 +198,22 @@ var _ = Describe("Crypto setup", func() {
 
 		It("returns diversification nonces", func() {
 			Expect(cs.DiversificationNonce()).To(HaveLen(32))
+		})
+	})
+
+	Context("source address token", func() {
+		It("uses the IP address when the remote address is a UDP address", func() {
+			remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 3, 3, 7), Port: 1337}
+			cs, err := NewCryptoSetup(protocol.ConnectionID(42), remoteAddr, protocol.VersionWhatever, scfg, stream, cpm, aeadChanged)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.(*cryptoSetupServer).sourceAddr).To(BeEquivalentTo(remoteAddr.IP))
+		})
+
+		It("works with remote address that are not UDP", func() {
+			remoteAddr := &net.TCPAddr{IP: net.IPv4(1, 3, 3, 7), Port: 1337}
+			cs, err := NewCryptoSetup(protocol.ConnectionID(42), remoteAddr, protocol.VersionWhatever, scfg, stream, cpm, aeadChanged)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.(*cryptoSetupServer).sourceAddr).To(BeEquivalentTo("1.3.3.7:1337"))
 		})
 	})
 
