@@ -7,42 +7,12 @@ import (
 
 	"github.com/knq/chromedp"
 
-	"github.com/knq/chromedp/runner"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-func getChromeForVersion(ctx context.Context, version protocol.VersionNumber) *chromedp.CDP {
-	cdp, err := chromedp.New(ctx, chromedp.WithRunnerOptions(
-		runner.Flag("enable-quic", true),
-		runner.Flag("no-proxy-server", true),
-		runner.Flag("origin-to-force-quic-on", "quic.clemente.io:443"),
-		runner.Flag("host-resolver-rules",
-			fmt.Sprintf("MAP quic.clemente.io:443 localhost:%s", port)),
-		runner.Flag("quic-version", fmt.Sprintf("QUIC_VERSION_%d", version)),
-	))
-	Expect(err).NotTo(HaveOccurred())
-	return cdp
-}
-
-func navigate(ctx context.Context, chrome *chromedp.CDP, url string) {
-	err := chrome.Run(ctx, chromedp.Tasks{
-		chromedp.Navigate(url),
-	})
-	Expect(err).NotTo(HaveOccurred())
-}
-
-func waitForText(ctx context.Context, chrome *chromedp.CDP, text string) {
-	Eventually(func() string {
-		var res string
-		err := chrome.Run(ctx, chromedp.Tasks{chromedp.Text("body", &res)})
-		Expect(err).NotTo(HaveOccurred())
-		return res
-	}, 10).Should(ContainSubstring(text))
-}
-
-var _ = Describe("Chrome tests", func() {
+var _ = FDescribe("Chrome tests", func() {
 	It("does not work with mismatching versions", func() {
 		versionForUs := protocol.SupportedVersions[0]
 		versionForChrome := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
@@ -55,16 +25,10 @@ var _ = Describe("Chrome tests", func() {
 		supportedVersionsBefore := protocol.SupportedVersions
 		protocol.SupportedVersions = []protocol.VersionNumber{versionForUs}
 
-		ctx, cancelChrome := context.WithCancel(context.Background())
-		chrome := getChromeForVersion(ctx, versionForChrome)
+		ctx, chrome := chromeForVersion(versionForChrome)
 
 		defer func() {
 			protocol.SupportedVersions = supportedVersionsBefore
-			err := chrome.Shutdown(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			err = chrome.Wait()
-			Expect(err).NotTo(HaveOccurred())
-			cancelChrome()
 		}()
 
 		navigate(ctx, chrome, "https://quic.clemente.io/hello")
@@ -81,7 +45,6 @@ var _ = Describe("Chrome tests", func() {
 		Context(fmt.Sprintf("with quic version %d", version), func() {
 			var (
 				ctx                     context.Context
-				cancelChrome            context.CancelFunc
 				chrome                  *chromedp.CDP
 				supportedVersionsBefore []protocol.VersionNumber
 			)
@@ -91,16 +54,10 @@ var _ = Describe("Chrome tests", func() {
 				// time.Sleep(time.Hour)
 				supportedVersionsBefore = protocol.SupportedVersions
 				protocol.SupportedVersions = []protocol.VersionNumber{version}
-				ctx, cancelChrome = context.WithCancel(context.Background())
-				chrome = getChromeForVersion(ctx, version)
+				ctx, chrome = chromeForVersion(version)
 			})
 
 			AfterEach(func() {
-				defer cancelChrome()
-				err := chrome.Shutdown(ctx)
-				Expect(err).NotTo(HaveOccurred())
-				err = chrome.Wait()
-				Expect(err).NotTo(HaveOccurred())
 				protocol.SupportedVersions = supportedVersionsBefore
 			})
 

@@ -44,9 +44,11 @@ func TestIntegration(t *testing.T) {
 var _ = BeforeSuite(func() {
 	setupHTTPHandlers()
 	setupQuicServer()
+	initChromes()
 })
 
 var _ = AfterSuite(func() {
+	killChromes()
 	err := server.Close()
 	Expect(err).NotTo(HaveOccurred())
 }, 10)
