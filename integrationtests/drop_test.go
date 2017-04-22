@@ -21,21 +21,21 @@ var _ = Describe("Drop Proxy", func() {
 		dataMan.GenerateData(dataLen)
 	})
 
-	var dropproxy *proxy.UDPProxy
+	var proxy *quicproxy.QuicProxy
 
-	runDropTest := func(incomingPacketDropper, outgoingPacketDropper proxy.DropCallback, version protocol.VersionNumber) {
-		proxyPort := 12345
-
-		iPort, _ := strconv.Atoi(port)
+	runDropTest := func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber) {
 		var err error
-		dropproxy, err = proxy.NewUDPProxy(proxyPort, "localhost", iPort, incomingPacketDropper, outgoingPacketDropper, 0, 0)
+		proxy, err = quicproxy.NewQuicProxy("localhost:0", quicproxy.Opts{
+			RemoteAddr: "localhost:" + port,
+			DropPacket: dropCallback,
+		})
 		Expect(err).ToNot(HaveOccurred())
 
 		command := exec.Command(
 			clientPath,
 			"--quic-version="+strconv.Itoa(int(version)),
 			"--host=127.0.0.1",
-			"--port="+strconv.Itoa(proxyPort),
+			"--port="+strconv.Itoa(proxy.LocalPort()),
 			"https://quic.clemente.io/data",
 		)
 
@@ -47,7 +47,8 @@ var _ = Describe("Drop Proxy", func() {
 	}
 
 	AfterEach(func() {
-		dropproxy.Stop()
+		err := proxy.Close()
+		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(time.Millisecond)
 	})
 
@@ -64,11 +65,17 @@ var _ = Describe("Drop Proxy", func() {
 				}
 
 				It("gets a file when many outgoing packets are dropped", func() {
-					runDropTest(nil, dropper, version)
+					dropCallback := func(d quicproxy.Direction, p protocol.PacketNumber) bool {
+						return d == quicproxy.DirectionOutgoing && dropper(p)
+					}
+					runDropTest(dropCallback, version)
 				})
 
 				It("gets a file when many incoming packets are dropped", func() {
-					runDropTest(dropper, nil, version)
+					dropCallback := func(d quicproxy.Direction, p protocol.PacketNumber) bool {
+						return d == quicproxy.DirectionIncoming && dropper(p)
+					}
+					runDropTest(dropCallback, version)
 				})
 			})
 		})
